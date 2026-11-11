@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe6" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="纯静态五子棋：人机对弈、本地双人、双方军师提示、AI 对 AI 公平两局赛和离线安装。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="五子棋 · Gomoku" />
+    <meta
+      property="og:description"
+      content="纯静态五子棋：六档 AI、本地双人、双方军师提示、AI 对 AI 公平两局赛、棋谱库与离线安装。"
+    />
+    <meta property="og:image" content="./icons/icon-512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="五子棋" />
+    <link rel="manifest" href="./manifest.webmanifest?v=20261106-3" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+    <script>
+      try {
+        const storedTheme = localStorage.getItem("gomoku.theme");
+        const dark =
+          storedTheme === "dark" ||
+          (!storedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.setAttribute("content", dark ? "#171411" : "#f4efe6");
+      } catch {
+        // 忽略隐私模式下的存储失败。
+      }
+    </script>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d3a05e'/%3E%3Cpath d='M32 12v40M12 32h40' stroke='%237a5230' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='11' fill='%23241e17'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css?v=20261106-3" />
+    <title>五子棋 · Gomoku</title>
+  </head>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <div class="brand">
+          <span class="seal" aria-hidden="true">五</span>
+          <div class="brand-text">
+            <h1>五子棋</h1>
+            <p>Gomoku · 人机对弈</p>
+          </div>
+        </div>
+        <div class="masthead-tools">
+          <p class="board-meta" id="boardMeta">15 × 15 · 无禁手</p>
+          <div class="theme-actions">
+            <button type="button" id="sound" class="install-btn">音效</button>
+            <button type="button" id="theme" class="install-btn">夜间</button>
+            <button type="button" id="install" class="install-btn">安装到桌面</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="board-card" aria-label="棋盘">
+          <div class="board-frame">
+            <canvas
+              id="board"
+              width="720"
+              height="720"
+              tabindex="0"
+              role="application"
+              aria-label="五子棋棋盘，使用方向键移动，回车落子"
+              aria-describedby="boardHelp"
+            ></canvas>
+            <div
+              id="resultOverlay"
+              class="result-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="resultTitle"
+              aria-describedby="resultSub"
+              tabindex="-1"
+              hidden
+            >
+              <div class="result-card">
+                <p class="result-kicker">对局结束</p>
+                <h2 id="resultTitle">你赢了</h2>
+                <p id="resultSub" class="result-sub"></p>
+                <div class="result-actions">
+                  <button type="button" id="resultRestart" class="btn btn-primary">
+                    再来一局
+                  </button>
+                  <button type="button" id="resultUndo" class="btn">悔棋</button>
+                  <button type="button" id="resultClose" class="btn btn-ghost">看看棋盘</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="magnifier" class="magnifier" aria-hidden="true" hidden>
+            <canvas id="magnifierCanvas" width="240" height="240"></canvas>
+          </div>
+          <p id="boardHelp" class="sr-only">
+            使用方向键移动棋盘光标，按回车或空格落子；也可以直接用鼠标或手指点击交叉点。
+          </p>
+        </section>
+
+        <aside class="panel">
+          <section class="status-card" id="statusCard" data-state="your-turn">
+            <span class="status-stone" id="statusStone" data-color="black" aria-hidden="true"></span>
+            <div class="status-copy">
+              <p class="status-title" id="statusTitle">轮到你落子</p>
+              <p class="status-sub" id="statusSub">你执黑 · 第 1 手</p>
+            </div>
+          </section>
+          <p id="srStatus" class="sr-only" role="status" aria-live="polite"></p>
+
+          <section class="eval-card" id="evalCard" aria-label="形势估算">
+            <div class="eval-head">
+              <span class="eval-title">形势估算</span>
+              <div class="eval-actions">
+                <select id="analysisTime" class="eval-time" aria-label="分析时间">
+                  <option value="500">0.5s</option>
+                  <option value="800" selected>0.8s</option>
+                  <option value="2000">2s</option>
+                </select>
+                <button type="button" id="analyze" class="eval-button">分析</button>
+                <label class="eval-auto">
+                  <input type="checkbox" id="autoAnalyze" />
+                  <span>自动</span>
+                </label>
+              </div>
+            </div>
+            <div class="eval-body" id="evalBody" hidden>
+              <div class="eval-bar" id="evalBar" role="img" aria-label="黑白估算胜率">
+                <span id="evalBlackBar" class="eval-black"></span>
+                <span id="evalWhiteBar" class="eval-white"></span>
+              </div>
+              <div class="eval-labels">
+                <span id="evalBlackLabel">黑 50%</span>
+                <span id="evalWhiteLabel">白 50%</span>
+              </div>
+              <p class="eval-meta" id="evalMeta" role="status" aria-live="polite"></p>
+            </div>
+            <p class="eval-note" id="evalNote">基于 Rapfi 评分估算，不是精确统计胜率。</p>
+          </section>
+
+          <section class="stats-card" aria-label="战绩">
+            <div class="stats-row">
+              <span>本难度战绩</span>
+              <strong id="humanRecord">0 胜 0 负</strong>
+            </div>
+            <div class="stats-row">
+              <span>演示累计</span>
+              <strong id="demoRecord">黑 0 · 白 0 · 和 0</strong>
+            </div>
+            <div class="stats-actions">
+              <button type="button" id="review" class="stats-button">复盘</button>
+              <button type="button" id="share" class="stats-button">分享局面</button>
+              <button type="button" id="exportSgf" class="stats-button">导出 SGF</button>
+            </div>
+          </section>
+
+          <details class="library-card" id="libraryCard">
+            <summary>
+              <span>棋谱库</span>
+              <span class="library-count" id="libraryCount">0</span>
+            </summary>
+            <div class="library-row">
+              <button type="button" id="importSgfButton" class="stats-button">导入 SGF</button>
+              <button type="button" id="saveSgf" class="stats-button" disabled>保存本局</button>
+              <button type="button" id="deleteSgf" class="stats-button" disabled>删除</button>
+              <select id="sgfLibrary" aria-label="选择棋谱">
+                <option value="">选择棋谱</option>
+              </select>
+            </div>
+            <input id="importSgf" type="file" accept=".sgf,.txt" hidden />
+          </details>
+
+          <section class="control" id="modeControl">
+            <div class="control-head">
+              <h2>对局模式</h2>
+              <span class="control-note" id="modeNote">人机</span>
+            </div>
+            <div class="segmented" id="modeGroup" role="group" aria-label="对局模式">
+              <button type="button" data-mode="ai" class="is-active" aria-pressed="true">
+                人机
+              </button>
+              <button type="button" data-mode="local" aria-pressed="false">本地双人</button>
+            </div>
+          </section>
+
+          <section class="control" id="difficultyControl">
+            <div class="control-head">
+              <h2>难度</h2>
+              <span class="control-note" id="levelNote">攻守均衡</span>
+            </div>
+            <div class="segmented" id="levelGroup" role="group" aria-label="难度选择">
+              <button type="button" data-level="novice" aria-pressed="false">新手</button>
+              <button type="button" data-level="easy" aria-pressed="false">简单</button>
+              <button type="button" data-level="normal" class="is-active" aria-pressed="true">
+                普通
+              </button>
+              <button type="button" data-level="hard" aria-pressed="false">困难</button>
+              <button type="button" data-level="master" aria-pressed="false">高手</button>
+              <button type="button" data-level="challenge" aria-pressed="false">挑战</button>
+            </div>
+          </section>
+
+          <section class="control control-row">
+            <label class="field">
+              <span>棋盘</span>
+              <select id="boardSize">
+                <option value="13">13 × 13</option>
+                <option value="15" selected>15 × 15</option>
+                <option value="19">19 × 19</option>
+              </select>
+            </label>
+            <label class="field" id="sideField">
+              <span>执子</span>
+              <select id="side">
+                <option value="black" selected>执黑先行</option>
+                <option value="white">执白后行</option>
+              </select>
+            </label>
+          </section>
+
+          <details class="demo-config" id="demoConfig">
+            <summary>
+              <span>演示难度</span>
+              <span class="demo-summary" id="demoSummary">普通 vs 普通</span>
+            </summary>
+            <div class="demo-levels">
+              <label class="field">
+                <span>黑方</span>
+                <select id="demoBlack">
+                  <option value="novice">新手</option>
+                  <option value="easy">简单</option>
+                  <option value="normal" selected>普通</option>
+                  <option value="hard">困难</option>
+                  <option value="master">高手</option>
+                  <option value="challenge">挑战</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>白方</span>
+                <select id="demoWhite">
+                  <option value="novice">新手</option>
+                  <option value="easy">简单</option>
+                  <option value="normal" selected>普通</option>
+                  <option value="hard">困难</option>
+                  <option value="master">高手</option>
+                  <option value="challenge">挑战</option>
+                </select>
+              </label>
+            </div>
+            <p class="demo-note">
+              双方可分别选择。修改后从下一手生效；若该方正在思考，会按新难度重算这一手。
+            </p>
+            <div class="demo-series-row">
+              <label class="eval-auto" title="双方各执黑一次，按选手计分，1:1 记平局">
+                <input type="checkbox" id="twoGameSeries" />
+                <span>公平两局</span>
+              </label>
+              <!-- 兼容仍被旧 Service Worker 缓存的旧版脚本，升级完成后可移除。 -->
+              <input type="checkbox" id="bestOfThree" hidden aria-hidden="true" tabindex="-1" />
+              <button type="button" id="swapDemo" class="stats-button">交换黑白</button>
+              <strong id="seriesScore" class="demo-series-score">A 0 : 0 B</strong>
+            </div>
+            <p class="demo-series-note">
+              两局赛：第一局执黑者为 A、执白者为 B；第二局交换黑白。1:1 记平局，不设第三局。
+            </p>
+          </details>
+
+          <section class="actions">
+            <button type="button" id="restart" class="btn btn-primary">新对局</button>
+            <button type="button" id="undo" class="btn" disabled>悔棋</button>
+            <button type="button" id="hint" class="btn" disabled>军师</button>
+            <button type="button" id="demo" class="btn btn-ghost" aria-pressed="false">
+              演示
+            </button>
+          </section>
+
+          <p class="footnote">
+            无禁手规则 · 横、竖、斜任意方向连成五子即胜 · 卡住可点「军师」。
+          </p>
+        </aside>
+      </main>
+
+      <footer class="colophon">
+        <span>静态页面 · 可安装 · 离线可玩</span>
+        <span aria-hidden="true">·</span>
+        <span>落子即算，AI 在本地推演</span>
+        <span class="version">v20261106-3</span>
+      </footer>
+    </div>
+
+    <section id="reviewBar" class="review-bar" aria-label="复盘控制" hidden>
+      <button type="button" id="reviewPrev" class="review-button">上一手</button>
+      <span id="reviewLabel" class="review-label">0 / 0</span>
+      <button type="button" id="reviewNext" class="review-button">下一手</button>
+      <button type="button" id="reviewExit" class="review-exit">退出复盘</button>
+    </section>
+
+    <div id="updateBanner" class="update-banner" role="status" hidden>
+      <span>新版本已就绪</span>
+      <button type="button" id="updateReload" class="update-reload">刷新</button>
+      <button type="button" id="updateDismiss" class="update-dismiss" aria-label="关闭">
+        ×
+      </button>
+    </div>
+
+    <dialog id="installHelp" class="confirm-dialog" aria-labelledby="installHelpTitle">
+      <div class="confirm-card">
+        <h2 id="installHelpTitle">安装到桌面</h2>
+        <p id="installHelpText"></p>
+        <div class="dialog-actions">
+          <button type="button" id="installHelpClose" class="btn btn-primary">知道了</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmTitle">
+      <div class="confirm-card">
+        <h2 id="confirmTitle">确认操作</h2>
+        <p id="confirmText"></p>
+        <div class="dialog-actions">
+          <button type="button" id="confirmCancel" class="btn">取消</button>
+          <button type="button" id="confirmOk" class="btn btn-primary">确认</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module" src="./src/main.js?v=20261106-3"></script>
+  </body>
+</html>

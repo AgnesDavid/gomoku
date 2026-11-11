@@ -1,0 +1,13 @@
+{
+  "name": "gomoku",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "纯静态五子棋：六档 AI、军师提示、AI 对 AI 演示、自动存档与 PWA 离线",
+  "scripts": {
+    "test": "node tests/game.test.js && node tests/ai.test.js && node tests/advice.test.js && node tests/eval.test.js && node tests/sgf.test.js && node tests/series.test.js",
+    "compress": "node scripts/compress.mjs",
+    "compress:clean": "node scripts/compress.mjs --clean",
+    "bump": "node scripts/bump-version.mjs"
+  }
+}
